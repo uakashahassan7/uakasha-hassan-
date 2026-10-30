@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Category, Product, Coupon, Profile, Order } from '../types';
+import { Category, Product, Coupon, Profile, Order, ProductReview } from '../types';
+
 
 export const SEED_CATEGORIES: Category[] = [
   {
@@ -691,5 +692,52 @@ export const SEED_ORDERS: Order[] = [
         image_url: 'https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=900&q=80',
       },
     ],
+  },
+];
+
+export const SEED_REVIEWS: ProductReview[] = [
+  {
+    id: 'rev-001',
+    product_id: 'prod-kurta-royal',
+    user_id: 'user-cust-01',
+    user_name: 'Hassan Ali',
+    user_email: 'hassan@example.com',
+    rating: 5,
+    comment: 'The embroidery craftsmanship is exceptional. The Egyptian cotton feels very breathable in Islamabad weather, and the sizing matched the chart perfectly.',
+    created_at: '2026-10-28T14:20:00Z',
+    verified_purchase: true,
+  },
+  {
+    id: 'rev-002',
+    product_id: 'prod-attar-oudh-khayr',
+    user_id: 'user-cust-01',
+    user_name: 'Hassan Ali',
+    user_email: 'hassan@example.com',
+    rating: 5,
+    comment: 'Authentic deep Cambodian oudh with a warm amber drydown. Lasts well over 10 hours without being overpowering. Will definitely purchase again.',
+    created_at: '2026-10-28T16:45:00Z',
+    verified_purchase: true,
+  },
+  {
+    id: 'rev-003',
+    product_id: 'prod-lawn-suit-3pc',
+    user_id: 'user-cust-02',
+    user_name: 'Fatima Zahra',
+    user_email: 'fatima.zahra@example.com',
+    rating: 5,
+    comment: 'The chiffon dupatta drape is exquisite and the stitch quality is top tier. Received compliments at family dinner. Delivered swiftly in Lahore.',
+    created_at: '2026-10-29T12:10:00Z',
+    verified_purchase: true,
+  },
+  {
+    id: 'rev-004',
+    product_id: 'prod-earbuds-anc',
+    user_id: 'user-cust-03',
+    user_name: 'Zubair Tariq',
+    user_email: 'zubair.t@example.com',
+    rating: 4,
+    comment: 'Impressive active noise cancellation for the price. Clear bass and call quality in noisy traffic is crisp. Battery backup easily lasts 2 days.',
+    created_at: '2026-10-25T09:30:00Z',
+    verified_purchase: true,
   },
 ];

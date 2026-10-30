@@ -8,7 +8,7 @@ import { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { formatPKR } from '../../utils/ecommerce-logic';
 import { ImageWithFallback } from '../common/ImageWithFallback';
-import { Heart, Eye } from 'lucide-react';
+import { Heart, Eye, Star } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -21,9 +21,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onSelect,
   openAuthModal,
 }) => {
-  const { isInWishlist, toggleWishlist, categories } = useStore();
+  const { isInWishlist, toggleWishlist, categories, reviews } = useStore();
   const wishlisted = isInWishlist(product.id);
   const [isHovered, setIsHovered] = useState(false);
+
+  // Review stats
+  const productReviews = reviews ? reviews.filter((r) => r.product_id === product.id) : [];
+  const hasReviews = productReviews.length > 0;
+  const avgRating = hasReviews
+    ? (productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length).toFixed(1)
+    : null;
 
   // Find category name
   const category = categories.find((c) => c.id === product.category_id);
@@ -118,11 +125,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       {/* Content */}
       <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
         <div>
-          {category && (
-            <p className="text-[11px] font-medium text-[#6B6B66] uppercase tracking-wider mb-1">
-              {category.name}
-            </p>
-          )}
+          <div className="flex items-center justify-between gap-1 mb-1">
+            {category && (
+              <p className="text-[11px] font-medium text-[#6B6B66] uppercase tracking-wider">
+                {category.name}
+              </p>
+            )}
+            {hasReviews && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-[#0F3B2E] ml-auto">
+                <Star className="w-3 h-3 fill-[#B8963E] text-[#B8963E]" />
+                <span>{avgRating}</span>
+                <span className="text-[10px] text-[#6B6B66] font-normal">({productReviews.length})</span>
+              </span>
+            )}
+          </div>
           <h3 className="font-serif font-bold text-[#1C1C1C] text-sm sm:text-[15px] leading-snug line-clamp-2 group-hover:text-[#0F3B2E] transition-colors">
             {product.name}
           </h3>

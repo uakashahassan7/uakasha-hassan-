@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CartItem, Coupon, OrderStatus, ProductVariant, UserRole, CheckoutFormData } from '../types';
+import { CartItem, Coupon, OrderStatus, ProductVariant, UserRole, CheckoutFormData, Order, ProductReview } from '../types';
+
 
 /**
  * Generates unique order number in format: BRV-YYMMDD-XXXX
@@ -264,4 +265,116 @@ export function canTransitionOrderStatus(
     allowed: false,
     reason: `Invalid transition from ${currentStatus} to ${targetStatus}`,
   };
+}
+
+/**
+ * Checks if an authenticated user has previously ordered a specific product.
+ * Returns true if there is at least one non-cancelled order containing the product.
+ */
+export function hasUserOrderedProduct(
+  orders: Order[],
+  user: { id: string; email?: string } | null | undefined,
+  productId: string
+): boolean {
+  if (!user || !user.id || !productId) {
+    return false;
+  }
+
+  const userEmail = user.email ? user.email.trim().toLowerCase() : '';
+
+  return orders.some((order) => {
+    // Only count active or fulfilled orders (skip cancelled orders)
+    if (order.status === 'cancelled') {
+      return false;
+    }
+
+    const matchesUser =
+      order.user_id === user.id ||
+      (userEmail && order.customer_email && order.customer_email.trim().toLowerCase() === userEmail);
+
+    if (!matchesUser) {
+      return false;
+    }
+
+    return order.items && order.items.some((item) => item.product_id === productId);
+  });
+}
+
+export interface ReviewSummary {
+  averageRating: number;
+  totalReviews: number;
+  ratingCounts: Record<1 | 2 | 3 | 4 | 5, number>;
+  ratingPercentages: Record<1 | 2 | 3 | 4 | 5, number>;
+}
+
+/**
+ * Calculates rating statistics (average rating, count breakdown, percentage distribution)
+ */
+export function calculateReviewSummary(reviews: ProductReview[]): ReviewSummary {
+  const counts: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
+
+  if (!reviews || reviews.length === 0) {
+    return {
+      averageRating: 0,
+      totalReviews: 0,
+      ratingCounts: counts,
+      ratingPercentages: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    };
+  }
+
+  let totalScore = 0;
+  reviews.forEach((r) => {
+    const score = Math.max(1, Math.min(5, Math.round(r.rating))) as 1 | 2 | 3 | 4 | 5;
+    counts[score] = (counts[score] || 0) + 1;
+    totalScore += r.rating;
+  });
+
+  const totalReviews = reviews.length;
+  const averageRating = Number((totalScore / totalReviews).toFixed(1));
+
+  const percentages: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: Math.round((counts[1] / totalReviews) * 100),
+    2: Math.round((counts[2] / totalReviews) * 100),
+    3: Math.round((counts[3] / totalReviews) * 100),
+    4: Math.round((counts[4] / totalReviews) * 100),
+    5: Math.round((counts[5] / totalReviews) * 100),
+  };
+
+  return {
+    averageRating,
+    totalReviews,
+    ratingCounts: counts,
+    ratingPercentages: percentages,
+  };
+}
+
+/**
+ * Validates review input:
+ * - rating must be an integer 1-5
+ * - comment must be non-empty and at least 5 characters
+ */
+export function validateReviewInput(
+  rating: number,
+  comment: string
+): { isValid: boolean; error?: string } {
+  if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+    return { isValid: false, error: 'Please select a star rating between 1 and 5 stars' };
+  }
+
+  const trimmedComment = (comment || '').trim();
+  if (trimmedComment.length < 5) {
+    return { isValid: false, error: 'Please write a review of at least 5 characters sharing your experience' };
+  }
+
+  if (trimmedComment.length > 1000) {
+    return { isValid: false, error: 'Review text cannot exceed 1,000 characters' };
+  }
+
+  return { isValid: true };
 }

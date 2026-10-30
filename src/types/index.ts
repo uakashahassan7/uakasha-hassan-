@@ -148,3 +148,16 @@ export interface CheckoutFormData {
   postalCode?: string;
   orderNotes?: string;
 }
+
+export interface ProductReview {
+  id: string;
+  product_id: string;
+  user_id: string;
+  user_name: string;
+  user_email?: string;
+  rating: number; // 1 to 5
+  comment: string;
+  created_at: string;
+  verified_purchase: boolean;
+}
+

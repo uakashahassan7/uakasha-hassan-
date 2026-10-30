@@ -15,8 +15,11 @@ import {
   validatePhonePK,
   validateCheckoutForm,
   canTransitionOrderStatus,
+  hasUserOrderedProduct,
+  calculateReviewSummary,
+  validateReviewInput,
 } from './ecommerce-logic';
-import { Coupon, CartItem, ProductVariant } from '../types';
+import { Coupon, CartItem, ProductVariant, Order, ProductReview } from '../types';
 
 test('generateOrderNumber generates expected format BRV-YYMMDD-XXXX', () => {
   const fixedDate = new Date('2026-10-29T12:00:00Z');
@@ -269,4 +272,183 @@ test('admin lockout logic triggers 60s lockdown after 5 failed attempts', () => 
   assert.equal(calculateLockout(1, now).lockedUntil, null);
   assert.equal(calculateLockout(3, now).lockedUntil, null);
   assert.equal(calculateLockout(4, now).lockedUntil, now + 60000); // 5th attempt locks for 60s
+});
+
+test('hasUserOrderedProduct verifies customer order history accurately', () => {
+  const dummyOrders: Order[] = [
+    {
+      id: 'ord-1',
+      order_number: 'BRV-261027-A1B2',
+      user_id: 'user-hassan',
+      customer_name: 'Hassan Ali',
+      customer_phone: '03214567890',
+      customer_email: 'hassan@example.com',
+      shipping_address: 'Address 1',
+      city: 'Islamabad',
+      province: 'Federal',
+      postal_code: '44000',
+      payment_method: 'cod',
+      payment_status: 'paid',
+      status: 'delivered',
+      subtotal: 5000,
+      discount_amount: 0,
+      delivery_fee: 0,
+      total: 5000,
+      coupon_code: null,
+      order_notes: null,
+      created_at: '2026-10-27T10:00:00Z',
+      updated_at: '2026-10-28T10:00:00Z',
+      items: [
+        {
+          id: 'item-1',
+          order_id: 'ord-1',
+          product_id: 'prod-kurta-royal',
+          variant_id: 'var-1',
+          product_name: 'Royal Kurta',
+          variant_label: 'Size L',
+          unit_price: 5000,
+          quantity: 1,
+          line_total: 5000,
+          image_url: 'https://example.com/img.jpg',
+        },
+      ],
+    },
+    {
+      id: 'ord-2',
+      order_number: 'BRV-261028-C3D4',
+      user_id: 'user-fatima',
+      customer_name: 'Fatima Zahra',
+      customer_phone: '03338765432',
+      customer_email: 'fatima@example.com',
+      shipping_address: 'Address 2',
+      city: 'Lahore',
+      province: 'Punjab',
+      postal_code: '54000',
+      payment_method: 'cod',
+      payment_status: 'unpaid',
+      status: 'cancelled', // CANCELLED ORDER!
+      subtotal: 3000,
+      discount_amount: 0,
+      delivery_fee: 0,
+      total: 3000,
+      coupon_code: null,
+      order_notes: null,
+      created_at: '2026-10-28T10:00:00Z',
+      updated_at: '2026-10-28T11:00:00Z',
+      items: [
+        {
+          id: 'item-2',
+          order_id: 'ord-2',
+          product_id: 'prod-attar-oudh-khayr',
+          variant_id: 'var-2',
+          product_name: 'Oudh Attar',
+          variant_label: '12ml',
+          unit_price: 3000,
+          quantity: 1,
+          line_total: 3000,
+          image_url: 'https://example.com/img2.jpg',
+        },
+      ],
+    },
+  ];
+
+  // Hassan ordered prod-kurta-royal -> true
+  assert.equal(
+    hasUserOrderedProduct(dummyOrders, { id: 'user-hassan', email: 'hassan@example.com' }, 'prod-kurta-royal'),
+    true
+  );
+
+  // Match by email case-insensitively
+  assert.equal(
+    hasUserOrderedProduct(dummyOrders, { id: 'different-id', email: 'HASSAN@EXAMPLE.COM' }, 'prod-kurta-royal'),
+    true
+  );
+
+  // Hassan did NOT order prod-earbuds -> false
+  assert.equal(
+    hasUserOrderedProduct(dummyOrders, { id: 'user-hassan', email: 'hassan@example.com' }, 'prod-earbuds'),
+    false
+  );
+
+  // Fatima's order for prod-attar was cancelled -> false
+  assert.equal(
+    hasUserOrderedProduct(dummyOrders, { id: 'user-fatima', email: 'fatima@example.com' }, 'prod-attar-oudh-khayr'),
+    false
+  );
+
+  // Guest / null user -> false
+  assert.equal(hasUserOrderedProduct(dummyOrders, null, 'prod-kurta-royal'), false);
+  assert.equal(hasUserOrderedProduct(dummyOrders, { id: '' }, 'prod-kurta-royal'), false);
+});
+
+test('calculateReviewSummary calculates averages and star distribution correctly', () => {
+  // Empty reviews case
+  const emptySummary = calculateReviewSummary([]);
+  assert.equal(emptySummary.averageRating, 0);
+  assert.equal(emptySummary.totalReviews, 0);
+  assert.deepEqual(emptySummary.ratingCounts, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
+
+  // Populated reviews
+  const mockReviews: ProductReview[] = [
+    {
+      id: 'r1',
+      product_id: 'p1',
+      user_id: 'u1',
+      user_name: 'Ali',
+      rating: 5,
+      comment: 'Excellent quality',
+      created_at: '2026-10-28T00:00:00Z',
+      verified_purchase: true,
+    },
+    {
+      id: 'r2',
+      product_id: 'p1',
+      user_id: 'u2',
+      user_name: 'Sara',
+      rating: 5,
+      comment: 'Loved the fabric',
+      created_at: '2026-10-28T00:00:00Z',
+      verified_purchase: true,
+    },
+    {
+      id: 'r3',
+      product_id: 'p1',
+      user_id: 'u3',
+      user_name: 'Bilal',
+      rating: 4,
+      comment: 'Good fit and fast delivery',
+      created_at: '2026-10-28T00:00:00Z',
+      verified_purchase: true,
+    },
+  ];
+
+  const summary = calculateReviewSummary(mockReviews);
+  assert.equal(summary.totalReviews, 3);
+  // (5 + 5 + 4) / 3 = 4.6666... -> 4.7
+  assert.equal(summary.averageRating, 4.7);
+  assert.equal(summary.ratingCounts[5], 2);
+  assert.equal(summary.ratingCounts[4], 1);
+  assert.equal(summary.ratingCounts[3], 0);
+  assert.equal(summary.ratingPercentages[5], 67); // 2/3 = 67%
+  assert.equal(summary.ratingPercentages[4], 33); // 1/3 = 33%
+});
+
+test('validateReviewInput validates star rating and comment length constraints', () => {
+  // Valid
+  assert.equal(validateReviewInput(5, 'Stunning craftsmanship and fine fabric!').isValid, true);
+  assert.equal(validateReviewInput(1, 'Poor fit and color does not match photos').isValid, true);
+
+  // Invalid rating
+  assert.equal(validateReviewInput(0, 'Good product').isValid, false);
+  assert.equal(validateReviewInput(6, 'Good product').isValid, false);
+  assert.equal(validateReviewInput(NaN, 'Good product').isValid, false);
+
+  // Invalid comment
+  assert.equal(validateReviewInput(5, '').isValid, false);
+  assert.equal(validateReviewInput(5, '   ').isValid, false);
+  assert.equal(validateReviewInput(5, 'Nice').isValid, false); // < 5 chars
+
+  // Comment too long
+  const tooLong = 'a'.repeat(1001);
+  assert.equal(validateReviewInput(5, tooLong).isValid, false);
 });

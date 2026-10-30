@@ -7,10 +7,11 @@ import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { Product, ProductVariant } from '../types';
 import { useStore } from '../context/StoreContext';
-import { formatPKR, getVariantPrice } from '../utils/ecommerce-logic';
+import { formatPKR, getVariantPrice, calculateReviewSummary } from '../utils/ecommerce-logic';
 import { ProductCard } from '../components/shop/ProductCard';
 import { ImageWithFallback } from '../components/common/ImageWithFallback';
 import { WhatsAppIcon } from '../components/common/WhatsAppIcon';
+import { ProductReviewsSection } from '../components/shop/ProductReviewsSection';
 import { formatProductMessage, buildWhatsAppUrl } from '../lib/whatsapp';
 import {
   Heart,
@@ -23,6 +24,7 @@ import {
   Zap,
   ChevronRight,
   Check,
+  Star,
 } from 'lucide-react';
 
 interface ProductDetailPageProps {
@@ -41,7 +43,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { products, categories, addToCart, isInWishlist, toggleWishlist, showToast } = useStore();
+  const { products, categories, addToCart, isInWishlist, toggleWishlist, showToast, reviews } = useStore();
 
   const handleSelectProduct = (id: string) => {
     if (onSelectProduct) {
@@ -74,6 +76,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const category = useMemo(() => {
     return categories.find((c) => c.id === product?.category_id);
   }, [categories, product]);
+
+  // Reviews summary for product
+  const productReviews = useMemo(() => {
+    return reviews.filter((r) => r.product_id === product?.id);
+  }, [reviews, product?.id]);
+
+  const reviewSummary = useMemo(() => {
+    return calculateReviewSummary(productReviews);
+  }, [productReviews]);
 
   // Gallery state
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -310,7 +321,40 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#0F3B2E] leading-tight">
               {product.name}
             </h1>
-            <div className="flex items-center gap-3 mt-2 text-xs text-[#6B6B66]">
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-[#6B6B66]">
+              {reviewSummary.totalReviews > 0 ? (
+                <a
+                  href="#reviews-section"
+                  className="inline-flex items-center gap-1.5 hover:text-[#0F3B2E] transition-colors group cursor-pointer"
+                >
+                  <div className="flex text-[#B8963E]">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        className={`w-3.5 h-3.5 ${
+                          s <= Math.round(reviewSummary.averageRating)
+                            ? 'fill-[#B8963E] text-[#B8963E]'
+                            : 'text-[#E4DFD1] fill-transparent'
+                        }`}
+                        strokeWidth={1.5}
+                      />
+                    ))}
+                  </div>
+                  <span className="font-bold text-[#0F3B2E]">{reviewSummary.averageRating}</span>
+                  <span className="group-hover:underline text-[#6B6B66]">
+                    ({reviewSummary.totalReviews} verified {reviewSummary.totalReviews === 1 ? 'review' : 'reviews'})
+                  </span>
+                </a>
+              ) : (
+                <a
+                  href="#reviews-section"
+                  className="inline-flex items-center gap-1 text-xs text-[#B8963E] hover:underline"
+                >
+                  <Star className="w-3.5 h-3.5 text-[#B8963E]" />
+                  <span>Be the first to review</span>
+                </a>
+              )}
+              <span>·</span>
               <span>SKU: {selectedVariant?.sku || 'BRV-STD'}</span>
               <span>·</span>
               <span className="text-[#0F3B2E] font-medium">100% Genuine Guarantee</span>
@@ -557,6 +601,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Customer Reviews Section */}
+      <ProductReviewsSection
+        product={product}
+        openAuthModal={openAuthModal}
+      />
 
       {/* Related Products */}
       {relatedProducts.length > 0 && (

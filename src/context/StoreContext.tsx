@@ -15,6 +15,7 @@ import {
   OrderStatus,
   CheckoutFormData,
   UserRole,
+  ProductReview,
 } from '../types';
 import {
   SEED_CATEGORIES,
@@ -22,6 +23,7 @@ import {
   SEED_COUPONS,
   SEED_PROFILES,
   SEED_ORDERS,
+  SEED_REVIEWS,
 } from '../data/seedData';
 import {
   generateOrderNumber,
@@ -29,6 +31,8 @@ import {
   getVariantPrice,
   validateCoupon,
   canTransitionOrderStatus,
+  hasUserOrderedProduct,
+  validateReviewInput,
 } from '../utils/ecommerce-logic';
 
 export interface ToastMessage {
@@ -87,6 +91,17 @@ interface StoreContextType {
   logout: () => void;
   updateCurrentUserProfile: (updates: Partial<Profile>) => void;
 
+  // Reviews
+  reviews: ProductReview[];
+  addReview: (data: { productId: string; rating: number; comment: string }) => {
+    success: boolean;
+    message: string;
+    review?: ProductReview;
+  };
+  deleteReview: (reviewId: string) => void;
+  hasOrderedProduct: (productId: string) => boolean;
+  getUserReviewForProduct: (productId: string) => ProductReview | undefined;
+
   // UI & Notifications
   toasts: ToastMessage[];
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -110,6 +125,7 @@ const STORAGE_KEYS = {
   USERS: 'brv_users_v1',
   CURRENT_USER: 'brv_current_user_v1',
   APPLIED_COUPON: 'brv_applied_coupon_v1',
+  REVIEWS: 'brv_reviews_v1',
 };
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -197,6 +213,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
+  const [reviews, setReviews] = useState<ProductReview[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.REVIEWS);
+      return saved ? JSON.parse(saved) : SEED_REVIEWS;
+    } catch {
+      return SEED_REVIEWS;
+    }
+  });
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const [isWishlistLoginModalOpen, setIsWishlistLoginModalOpen] = useState(false);
@@ -253,6 +278,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localStorage.removeItem(STORAGE_KEYS.APPLIED_COUPON);
     }
   }, [appliedCoupon]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(reviews));
+  }, [reviews]);
 
   // Toast system
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -847,6 +876,101 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [currentUser, showToast]
   );
 
+  // Review actions
+  const hasOrderedProduct = useCallback(
+    (productId: string) => {
+      return hasUserOrderedProduct(orders, currentUser, productId);
+    },
+    [orders, currentUser]
+  );
+
+  const getUserReviewForProduct = useCallback(
+    (productId: string) => {
+      if (!currentUser) return undefined;
+      const userEmail = currentUser.email?.toLowerCase();
+      return reviews.find(
+        (r) =>
+          r.product_id === productId &&
+          (r.user_id === currentUser.id || (userEmail && r.user_email?.toLowerCase() === userEmail))
+      );
+    },
+    [reviews, currentUser]
+  );
+
+  const addReview = useCallback(
+    (data: { productId: string; rating: number; comment: string }) => {
+      if (!currentUser) {
+        showToast('Please sign in to submit a review', 'error');
+        return { success: false, message: 'Please sign in to submit a review' };
+      }
+
+      const ordered = hasUserOrderedProduct(orders, currentUser, data.productId);
+      if (!ordered) {
+        showToast('Only customers who have previously ordered this product can submit a verified review', 'error');
+        return {
+          success: false,
+          message: 'Only customers who have previously ordered this product can submit a verified review',
+        };
+      }
+
+      const validation = validateReviewInput(data.rating, data.comment);
+      if (!validation.isValid) {
+        const msg = validation.error || 'Invalid review input';
+        showToast(msg, 'error');
+        return { success: false, message: msg };
+      }
+
+      const userEmail = currentUser.email?.toLowerCase();
+      const existingIndex = reviews.findIndex(
+        (r) =>
+          r.product_id === data.productId &&
+          (r.user_id === currentUser.id || (userEmail && r.user_email?.toLowerCase() === userEmail))
+      );
+
+      let resultingReview: ProductReview;
+
+      if (existingIndex >= 0) {
+        // Update existing review
+        resultingReview = {
+          ...reviews[existingIndex],
+          rating: data.rating,
+          comment: data.comment.trim(),
+          user_name: currentUser.full_name || reviews[existingIndex].user_name,
+          verified_purchase: true,
+          created_at: new Date().toISOString(),
+        };
+        setReviews((prev) => prev.map((r, i) => (i === existingIndex ? resultingReview : r)));
+        showToast('Your review has been updated successfully!', 'success');
+      } else {
+        // Create new review
+        resultingReview = {
+          id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          product_id: data.productId,
+          user_id: currentUser.id,
+          user_name: currentUser.full_name || 'Verified Customer',
+          user_email: currentUser.email,
+          rating: data.rating,
+          comment: data.comment.trim(),
+          created_at: new Date().toISOString(),
+          verified_purchase: true,
+        };
+        setReviews((prev) => [resultingReview, ...prev]);
+        showToast('Thank you! Your verified review has been published.', 'success');
+      }
+
+      return { success: true, message: 'Review saved', review: resultingReview };
+    },
+    [currentUser, orders, reviews, showToast]
+  );
+
+  const deleteReview = useCallback(
+    (reviewId: string) => {
+      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      showToast('Review removed', 'info');
+    },
+    [showToast]
+  );
+
   return (
     <StoreContext.Provider
       value={{
@@ -887,6 +1011,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         registerCustomer,
         logout,
         updateCurrentUserProfile,
+        reviews,
+        addReview,
+        deleteReview,
+        hasOrderedProduct,
+        getUserReviewForProduct,
         toasts,
         showToast,
         dismissToast,
